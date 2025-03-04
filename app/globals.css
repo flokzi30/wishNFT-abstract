@@ -1,0 +1,83 @@
+@import './styles/theme.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Temel stil tanımlamaları */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  /* Temel font ayarları */
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+/* Utility sınıfları */
+@layer utilities {
+  .custom-screen {
+    @apply max-w-screen-xl mx-auto px-4 md:px-8;
+  }
+}
+
+/* Gradient border */
+.gradient-border {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(white, white),
+    linear-gradient(
+      25deg,
+      rgba(209, 213, 219, 1),
+      rgba(209, 213, 219, 1),
+      rgba(0, 0, 0, 0.63),
+      rgba(209, 213, 219, 1),
+      rgba(209, 213, 219, 1)
+    );
+  background-clip: padding-box, border-box;
+  background-origin: padding-box, border-box;
+}
+
+/* Layout shift önleme */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Performans optimizasyonu */
+img {
+  content-visibility: auto;
+}
+
+/* Content box optimizasyonu */
+.content-box {
+  contain: content;
+}
+
+
+
+
+
+
