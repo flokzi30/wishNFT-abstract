@@ -1,9 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { getCategoryIcon } from '@/components/mint-a-wish/WishFormFields';
+import { useEffect, useState } from 'react';
+import { Category } from '@/types/contract';
 
-const wishesData = [
+// Static fallback data in case API fails
+const fallbackWishesData = [
   {
     id: 1,
     title: 'to travel around the world with my family.',
@@ -55,6 +59,45 @@ const wishesData = [
 ];
 
 const CommunityWishes = () => {
+  const [wishes, setWishes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchWishes = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/wishes');
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch wishes');
+        }
+        
+        const data = await response.json();
+        
+        const sortedWishes = [...data].sort((a, b) => 
+          parseInt(b.tokenId) - parseInt(a.tokenId)
+        );
+        
+        // Limit to the last 6 wishes
+        const recentWishes = sortedWishes.slice(0, 6);
+        
+        setWishes(recentWishes);
+      } catch (err) {
+        console.error('Error fetching wishes:', err);
+        setError('Failed to load wishes');
+        // Use fallback data if API fails
+        setWishes(fallbackWishesData);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchWishes();
+  }, []);
+
+
+
   return (
     <section className="py-12 sm:py-16 md:py-20 lg:py-24 bg-gradient-to-b from-white to-[var(--color-primary-lighter)]">
       <div className="custom-screen px-4 sm:px-6">
@@ -70,66 +113,39 @@ const CommunityWishes = () => {
           </p>
         </div>
 
-        <div className="grid gap-4 sm:gap-6 md:gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {wishesData.map((wish) => (
-            <Link
-              key={wish.id}
-              href={`/wishes/${wish.id}`}
-              className="relative aspect-square rounded-2xl overflow-hidden group"
-            >
-              {/* Gradient Background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-primary-lighter)] via-[var(--color-primary-light)] to-[var(--color-secondary-lighter)]" />
-
-              {/* Content Overlay */}
-              <div className="relative h-full p-4 sm:p-6 flex flex-col">
-                {/* Top Section */}
-                <div className="flex items-start justify-between mb-4 sm:mb-6">
-                  <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg">
-                    <span className="text-sm sm:text-md">
-                      {getCategoryIcon(wish.category)}
-                    </span>
-                    <span className="text-xs sm:text-sm font-medium text-[var(--color-grey-900)]">
-                      {wish.category}
-                    </span>
-                  </div>
-                  <div className="bg-[var(--color-primary-main)]/80 backdrop-blur-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg">
-                    <span className="text-xs sm:text-sm text-white font-medium">
-                      {wish.network}
-                    </span>
-                  </div>
+        {loading ? (
+          <div className="flex justify-center items-center min-h-[400px]">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[var(--color-primary-main)]"></div>
+          </div>
+        ) : error && wishes.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-[var(--color-grey-600)]">{error}</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:gap-6 md:gap-8 sm:grid-cols-2 lg:grid-cols-3">
+            {wishes.map((wish) => (
+              <Link
+                key={wish.tokenId}
+                href={`/wishes/${wish.tokenId}`}
+                className="relative aspect-square rounded-2xl overflow-hidden group hover:scale-[1.02] transition-transform duration-200"
+              >
+                {/* Background Image */}
+                <div className="absolute inset-0">
+                  <Image 
+                    src={wish.imageURI || '/placeholder-image.jpg'} 
+                    alt={wish.wishText || 'Wish Image'}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  />
+                  {/* Dark overlay for better text readability */}
+                  {/* <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" /> */}
                 </div>
 
-                {/* Main Content */}
-                <div className="flex-grow flex flex-col justify-center">
-                  <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 sm:p-6">
-                    <div className="text-white/60 text-sm sm:text-base mb-2 font-light">
-                      I wish for...
-                    </div>
-                    <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-white break-words leading-relaxed">
-                      {wish.title}
-                    </h3>
-                  </div>
-                </div>
-
-                {/* Bottom Section */}
-                <div className="mt-auto pt-3 sm:pt-4 border-t border-white/10">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] sm:text-xs text-white font-medium font-mono">
-                        Wisher: {wish.wallet}
-                      </span>
-                    </div>
-                    <div className="bg-[var(--color-primary-main)]/80 backdrop-blur-sm px-2 sm:px-3 py-1 rounded-lg">
-                      <span className="text-[10px] sm:text-xs text-white font-medium">
-                        #{wish.id}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        )}
 
         <div className="mt-8 sm:mt-10 md:mt-12 text-center">
           <Link
