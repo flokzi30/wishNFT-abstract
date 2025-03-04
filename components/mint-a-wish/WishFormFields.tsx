@@ -302,8 +302,13 @@ export default function WishFormFields({
                     );
                 }
               }}
-              className="flex-1 rounded-xl border border-[var(--color-primary-lighter)] px-4 py-2 text-[var(--color-grey-900)] 
-                shadow-sm focus:border-[var(--color-primary-main)] focus:ring-[var(--color-primary-main)] text-base"
+              className={`flex-1 rounded-xl border ${
+                formData.tags.length === 0 
+                  ? 'border-[var(--color-primary-main)]' 
+                  : 'border-[var(--color-primary-lighter)]'
+              } px-4 py-2 text-[var(--color-grey-900)] 
+                shadow-sm focus:border-[var(--color-primary-main)] focus:ring-[var(--color-primary-main)] text-base`}
+              aria-required="true"
             />
             <button
               type="button"

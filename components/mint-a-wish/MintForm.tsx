@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
-// import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { toPng } from 'html-to-image';
 import { categories, networks, type NetworkId } from '@/data/wishes';
 import WishFormFields, { getCategoryIcon } from './WishFormFields';
@@ -59,11 +59,22 @@ const WishPreview = React.forwardRef<
   WishPreviewProps
 >(({ formData, address, nextTokenId }, ref) => {
   const previewRef = useRef<HTMLDivElement>(null);
+  const [imageObjectUrl, setImageObjectUrl] = useState<string>('');
+
+  // Create and cleanup object URL when image changes
+  useEffect(() => {
+    if (formData.image) {
+      const url = URL.createObjectURL(formData.image);
+      setImageObjectUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    }
+  }, [formData.image]);
 
   const generateImage = async (): Promise<string> => {
     if (!previewRef.current) {
-      console.error('Preview ref is not available');
-      return '';
+      throw new Error('Preview reference is not available');
     }
 
     try {
@@ -73,44 +84,198 @@ const WishPreview = React.forwardRef<
         (watermark as HTMLElement).style.display = 'none';
       }
 
-      // Add a small delay to ensure DOM updates are complete
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Create a new canvas with the same dimensions
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) {
+        throw new Error('Failed to get canvas context');
+      }
 
-      console.log('Attempting to generate image...');
-      const dataUrl = await toPng(previewRef.current, {
-        quality: 0.95,
-        pixelRatio: 2,
-        cacheBust: true,
-        canvasWidth: 800,
-        canvasHeight: 800,
-        style: { transform: 'scale(1)', transformOrigin: 'top left' },
-        filter: (node) => {
-          try {
-            const style = window.getComputedStyle(node as Element);
-            return style.display !== 'none';
-          } catch (e) {
-            console.error('Filter error:', e);
-            return true;
+      // Set canvas dimensions
+      const dimensions = {
+        width: previewRef.current.offsetWidth,
+        height: previewRef.current.offsetHeight
+      };
+
+      if (dimensions.width === 0 || dimensions.height === 0) {
+        throw new Error(`Invalid preview dimensions: ${JSON.stringify(dimensions)}`);
+      }
+
+      canvas.width = dimensions.width * 2; // For better quality
+      canvas.height = dimensions.height * 2;
+      context.scale(2, 2); // Scale for higher resolution
+
+      // If there's an image, draw it first
+      if (formData.image) {
+        await new Promise<void>((resolve, reject) => {
+          const img = document.createElement('img');
+          img.crossOrigin = 'anonymous';
+          
+          img.onload = () => {
+            try {
+              // Calculate dimensions to cover the canvas while maintaining aspect ratio
+              const imgAspect = img.width / img.height;
+              const canvasAspect = dimensions.width / dimensions.height;
+              let drawWidth = dimensions.width;
+              let drawHeight = dimensions.height;
+              let offsetX = 0;
+              let offsetY = 0;
+
+              // Always fill the entire canvas
+              if (imgAspect > canvasAspect) {
+                // Image is wider than canvas
+                drawWidth = dimensions.height * imgAspect;
+                offsetX = (dimensions.width - drawWidth) / 2;
+              } else {
+                // Image is taller than canvas
+                drawHeight = dimensions.width / imgAspect;
+                offsetY = (dimensions.height - drawHeight) / 2;
+              }
+
+              // Draw the image to fill the entire canvas
+              context.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+              
+              // Add a darker overlay gradient
+              const overlay = context.createLinearGradient(0, 0, 0, dimensions.height);
+              overlay.addColorStop(0, 'rgba(0, 0, 0, 0.2)');
+              overlay.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
+              overlay.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
+              context.fillStyle = overlay;
+              context.fillRect(0, 0, dimensions.width, dimensions.height);
+
+              // Draw the content on top
+              toPng(previewRef.current!, {
+                quality: 0.95,
+                pixelRatio: 2,
+                cacheBust: true,
+                canvasWidth: canvas.width,
+                canvasHeight: canvas.height,
+                style: { transform: 'scale(1)', transformOrigin: 'top left' },
+                filter: (node) => {
+                  if (node.nodeType === 3) return true; // Text nodes
+                  if (node.nodeType === 1) { // Element nodes
+                    const element = node as Element;
+                    // Skip background elements and images
+                    if (element.tagName === 'IMG' || element.classList.contains('bg-gradient-to-br')) {
+                      return false;
+                    }
+                    const style = window.getComputedStyle(element);
+                    return style.display !== 'none';
+                  }
+                  return true;
+                }
+              }).then(dataUrl => {
+                const contentImg = document.createElement('img');
+                contentImg.onload = () => {
+                  context.drawImage(contentImg, 0, 0, dimensions.width, dimensions.height);
+                  resolve();
+                };
+                contentImg.onerror = reject;
+                contentImg.src = dataUrl;
+              }).catch(reject);
+              
+              URL.revokeObjectURL(img.src);
+            } catch (err) {
+              reject(err);
+            }
+          };
+          
+          img.onerror = () => {
+            URL.revokeObjectURL(img.src);
+            reject(new Error('Failed to load image for canvas'));
+          };
+          
+          const blobUrl = URL.createObjectURL(formData.image!);
+          img.src = blobUrl;
+        });
+      } else {
+        // If no image, draw a more vibrant gradient background
+        const gradient = context.createLinearGradient(0, 0, dimensions.width, dimensions.height);
+        
+        // Parse the background color class to get the gradient colors
+        const bgClass = formData.backgroundColor;
+        let colors: string[] = [];
+        
+        if (bgClass.includes('from-[#')) {
+          // Extract custom gradient colors
+          const matches = bgClass.match(/\[(#[A-Fa-f0-9]+)/g);
+          if (matches) {
+            colors = matches.map(match => match.substring(1)); // Remove the leading [
           }
-        },
-      });
-      console.log('Image generated successfully');
+        } else if (bgClass.includes('from-[var(')) {
+          // Handle CSS variable gradients
+          colors = ['#6C63FF', '#6366F1', '#A8A2FF'];
+        }
+
+        // Ensure we have at least start and end colors
+        if (colors.length < 2) {
+          colors = ['#6C63FF', '#6366F1', '#A8A2FF'];
+        }
+
+        // Apply gradient stops
+        colors.forEach((color, index) => {
+          const stop = index / (colors.length - 1);
+          gradient.addColorStop(stop, color);
+        });
+        
+        // Fill the background
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, dimensions.width, dimensions.height);
+
+        // Draw the content layer
+        await new Promise<void>((resolve, reject) => {
+          toPng(previewRef.current!, {
+            quality: 0.95,
+            pixelRatio: 2,
+            cacheBust: true,
+            canvasWidth: canvas.width,
+            canvasHeight: canvas.height,
+            style: { transform: 'scale(1)', transformOrigin: 'top left' },
+            filter: (node) => {
+              if (node.nodeType === 3) return true; // Text nodes
+              if (node.nodeType === 1) { // Element nodes
+                const element = node as Element;
+                // Skip only the base gradient background
+                if (element.classList.contains('bg-gradient-to-br')) {
+                  return false;
+                }
+                const style = window.getComputedStyle(element);
+                return style.display !== 'none';
+              }
+              return true;
+            }
+          }).then(dataUrl => {
+            const contentImg = document.createElement('img');
+            contentImg.onload = () => {
+              // Draw content over the gradient
+              context.drawImage(contentImg, 0, 0, dimensions.width, dimensions.height);
+              resolve();
+            };
+            contentImg.onerror = reject;
+            contentImg.src = dataUrl;
+          }).catch(reject);
+        });
+
+        // Add final overlay for better contrast
+        // const overlay = context.createLinearGradient(0, 0, 0, dimensions.height);
+        // overlay.addColorStop(0, 'rgba(0, 0, 0, 0.02)');
+        // overlay.addColorStop(0.5, 'rgba(0, 0, 0, 0.05)');
+        // overlay.addColorStop(1, 'rgba(0, 0, 0, 0.1)');
+        // context.fillStyle = overlay;
+        // context.fillRect(0, 0, dimensions.width, dimensions.height);
+      }
+
+      // Convert canvas to data URL
+      const dataUrl = canvas.toDataURL('image/png');
 
       // Show the watermark again
       if (watermark) {
         (watermark as HTMLElement).style.display = 'flex';
       }
 
-      if (!dataUrl || dataUrl.length === 0) {
-        throw new Error('Generated image is empty');
-      }
-
       return dataUrl;
     } catch (error) {
-      console.error('Detailed error in generateImage:', error);
-      throw new Error(
-        'Failed to generate preview image: ' + (error as Error).message,
-      );
+      throw error;
     }
   };
 
@@ -121,28 +286,37 @@ const WishPreview = React.forwardRef<
     <div className="space-y-4">
       <div
         ref={previewRef}
-        className="relative aspect-square rounded-2xl overflow-hidden group shadow-md border border-[var(--color-primary-lighter)]"
+        className="relative aspect-square rounded-[24px] overflow-hidden group shadow-md bg-white/5 backdrop-blur-sm"
       >
         {/* Gradient Background */}
         <div
-          className={`absolute inset-0 bg-gradient-to-br ${formData.backgroundColor}`}
+          className={`absolute inset-0 bg-gradient-to-br ${formData.backgroundColor} rounded-[24px]`}
         />
 
         {/* Image Background */}
-        {formData.image && (
-          <div className="absolute inset-0">
+        {formData.image && imageObjectUrl && (
+          <div className="absolute inset-0 w-full h-full overflow-hidden rounded-[24px]">
             <Image
-              src={URL.createObjectURL(formData.image)}
+              src={imageObjectUrl}
               alt="Preview"
               fill
-              className="object-cover opacity-30"
+              className="object-cover rounded-[24px]"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              priority
+              onError={() => {
+                URL.revokeObjectURL(imageObjectUrl);
+                setImageObjectUrl('');
+              }}
+              onLoad={() => {
+                // Image loaded successfully
+              }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-black/20" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/20 to-black/10 rounded-[24px]" />
           </div>
         )}
 
         {/* Content Overlay */}
-        <div className="relative h-full flex flex-col box-border p-4">
+        <div className="relative h-full flex flex-col box-border p-4 bg-black/5 rounded-[24px]">
           {/* Top Section */}
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg">
@@ -222,7 +396,7 @@ const WishPreview = React.forwardRef<
 WishPreview.displayName = 'WishPreview';
 
 export default function MintForm() {
-  // const router = useRouter();
+  const router = useRouter();
   const { login } = useLoginWithAbstract();
   const { createWish, isLoading, error } = useCreateWish();
   const { address } = useAccount();
@@ -236,11 +410,9 @@ export default function MintForm() {
       if (contract) {
         try {
           const supply = await contract.totalSupply();
-          console.log('Total supply:', supply);
-          // Next token ID will be total supply + 1
           setNextTokenId(supply + BigInt(1));
         } catch (error) {
-          console.error('Error fetching total supply:', error);
+          // Error handling remains
         }
       }
     };
@@ -292,40 +464,31 @@ export default function MintForm() {
 
   const uploadImageToPinata = async (): Promise<string | null> => {
     if (!wishPreviewRef.current) {
-      toast.error('Preview not ready');
       return null;
     }
 
     try {
       setUploadingImage(true);
-      console.log('Starting image generation...');
 
       // Generate the image
       const imageUrl = await wishPreviewRef.current.generateImage();
+
       if (!imageUrl) {
         throw new Error('Image generation returned empty result');
       }
-      console.log('Image generated, converting to blob...');
 
       // Convert base64 to blob
       const response = await fetch(imageUrl);
       const blob = await response.blob();
 
-      // Calculate and log the size
+      // Calculate size
       const sizeInBytes = blob.size;
-      const sizeInMB = (sizeInBytes / (1024 * 1024)).toFixed(2);
-      console.log('Image size:', {
-        bytes: sizeInBytes,
-        megabytes: `${sizeInMB} MB`,
-      });
-
       if (sizeInBytes === 0) {
         throw new Error('Generated image has zero size');
       }
 
       // Create a file from the blob
       const file = new File([blob], 'wish-preview.png', { type: 'image/png' });
-      console.log('File created, uploading to Pinata...');
 
       // Upload to Pinata
       const formData = new FormData();
@@ -343,11 +506,9 @@ export default function MintForm() {
 
       const data = await uploadResponse.json();
       setIpfsHash(data.ipfsHash);
-      console.log('Upload successful:', data);
 
       return data.url;
     } catch (error) {
-      console.error('Detailed upload error:', error);
       toast.error(`Failed to upload image: ${(error as Error).message}`);
       return null;
     } finally {
@@ -359,11 +520,8 @@ export default function MintForm() {
     e.preventDefault();
 
     if (!address) {
-      // Kullanıcı cüzdan bağlı değilse, önce login olmasını sağla
       try {
         await login();
-        // Not: login işlemi asenkron olduğu için, burada devam etmiyoruz
-        // Kullanıcı login olduktan sonra tekrar butona basacak
         toast.info(
           'Please click "Create Wish" again after connecting your wallet',
         );
@@ -375,17 +533,14 @@ export default function MintForm() {
     }
 
     try {
-      // First upload the image to Pinata
       const imageURI = await uploadImageToPinata();
 
       if (!imageURI) {
         throw new Error('Failed to upload image to IPFS');
       }
 
-      // Then create the wish with the returned URI
-      const result = await createWish({
+      await createWish({
         wishText: formData.wish,
-        // detailedExplanation: formData.description,
         category: formData.category,
         relatedTopics: formData.tags,
         background: backgroundStyleMap[formData.backgroundColor],
@@ -393,13 +548,11 @@ export default function MintForm() {
       });
 
       toast.success('Wish created successfully!');
-      console.log('Transaction hash:', result.hash);
-      console.log('IPFS Hash:', ipfsHash);
+      const tokenId = nextTokenId.toString();
       
       // Reset form
       setFormData({
         wish: '',
-        // description: '',
         category: categories[0],
         network: networks[0].id,
         image: null,
@@ -409,6 +562,15 @@ export default function MintForm() {
           'from-[var(--color-primary-lighter)] via-[var(--color-primary-light)] to-[var(--color-secondary-lighter)]',
       });
       setIpfsHash('');
+
+      // Wait for a short delay to ensure transaction is processed
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+
+
+      // Redirect to the wish details page
+      router.push(`/wishes/${tokenId}`);
+      
     } catch (err) {
       toast.error('Failed to create wish');
       console.error(err);
@@ -515,3 +677,4 @@ export default function MintForm() {
     </div>
   );
 }
+
