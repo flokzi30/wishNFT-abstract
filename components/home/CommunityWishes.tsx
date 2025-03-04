@@ -2,9 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { getCategoryIcon } from '@/components/mint-a-wish/WishFormFields';
 import { useEffect, useState } from 'react';
-import { Category } from '@/types/contract';
 
 // Static fallback data in case API fails
 const fallbackWishesData = [
