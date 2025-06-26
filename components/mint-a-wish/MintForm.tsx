@@ -7,13 +7,11 @@ import { toPng } from 'html-to-image';
 import { categories, networks, type NetworkId } from '@/data/wishes';
 import WishFormFields, { getCategoryIcon } from './WishFormFields';
 import NetworkInfo from './NetworkInfo';
-import { useCreateWish } from '@/hooks/useWishNFTContract';
-import { BackgroundStyle } from '@/types/contract';
 import { toast } from 'sonner';
-import { useAccount } from 'wagmi';
-import { useLoginWithAbstract } from '@abstract-foundation/agw-react';
 import React from 'react';
-import { useWishNFT } from '@/providers/WishNFTProvider';
+import { useUnifiedWishNFT } from '@/hooks/useUnifiedWishNFT';
+import NetworkSelector from './NetworkSelector';
+import UnifiedWalletButton from './UnifiedWalletButton';
 
 interface FormData {
   wish: string;
@@ -25,15 +23,31 @@ interface FormData {
   backgroundColor: string;
 }
 
-// Map background style to enum
-const backgroundStyleMap: Record<string, BackgroundStyle> = {
-  'from-[var(--color-primary-lighter)] via-[var(--color-primary-light)] to-[var(--color-secondary-lighter)]':
-    BackgroundStyle.BLUE,
-  'from-[#23e788] via-[#23e788]/80 to-[#23e788]/70': BackgroundStyle.GREEN,
-  'from-[#f7931a] via-[#f7931a]/80 to-white': BackgroundStyle.ORANGE,
-  'from-[#343434] via-gray-600 to-[#343434]': BackgroundStyle.DARK,
-  'from-[#9945FF] to-[#14F195]': BackgroundStyle.GRADIENT,
-};
+// // Background styles for UI selection
+// const backgroundOptions = [
+//   {
+//     id: 'default',
+//     name: 'Default',
+//     gradient:
+//       'from-[var(--color-primary-lighter)] via-[var(--color-primary-light)] to-[var(--color-secondary-lighter)]',
+//   },
+//   {
+//     id: 'abstract',
+//     name: 'Abstract',
+//     gradient: 'from-[#23e788] via-[#23e788]/80 to-[#23e788]/70',
+//   },
+//   {
+//     id: 'bitcoin',
+//     name: 'Bitcoin',
+//     gradient: 'from-[#f7931a] via-[#f7931a]/80 to-white',
+//   },
+//   {
+//     id: 'ethereum',
+//     name: 'Ethereum',
+//     gradient: 'from-[#343434] via-gray-600 to-[#343434]',
+//   },
+//   { id: 'solana', name: 'Solana', gradient: 'from-[#9945FF] to-[#14F195]' },
+// ];
 
 // Map category to enum
 // const categoryMap: Record<string, Category> = {
@@ -397,28 +411,18 @@ WishPreview.displayName = 'WishPreview';
 
 export default function MintForm() {
   const router = useRouter();
-  const { login } = useLoginWithAbstract();
-  const { createWish, isLoading, error } = useCreateWish();
-  const { address } = useAccount();
+  const { 
+    createWish, 
+    isMinting, 
+    error, 
+    isConnected,
+    walletAddress,
+    nextTokenId,
+    selectedNetwork,
+    isAbstract 
+  } = useUnifiedWishNFT();
   const [uploadingImage, setUploadingImage] = useState(false);
   const [ipfsHash, setIpfsHash] = useState<string>('');
-  const { contract } = useWishNFT();
-  const [nextTokenId, setNextTokenId] = useState<bigint>(BigInt(1));
-
-  useEffect(() => {
-    const fetchTotalSupply = async () => {
-      if (contract) {
-        try {
-          const supply = await contract.totalSupply();
-          setNextTokenId(supply + BigInt(1));
-        } catch (error) {
-          // Error handling remains
-        }
-      }
-    };
-
-    fetchTotalSupply();
-  }, [contract]);
 
   const [formData, setFormData] = useState<FormData>({
     wish: '',
@@ -519,17 +523,9 @@ export default function MintForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!address) {
-      try {
-        await login();
-        toast.info(
-          'Please click "Create Wish" again after connecting your wallet',
-        );
-        return;
-      } catch (error) {
-        toast.error('Failed to connect wallet');
-        return;
-      }
+    if (!isConnected || !walletAddress) {
+      toast.info('Please connect your wallet first');
+      return;
     }
 
     try {
@@ -543,11 +539,11 @@ export default function MintForm() {
         wishText: formData.wish,
         category: formData.category,
         relatedTopics: formData.tags,
-        background: backgroundStyleMap[formData.backgroundColor],
+        background: formData.backgroundColor,
         imageURI,
       });
 
-      toast.success('Wish created successfully!');
+      toast.success(`Wish created successfully on ${selectedNetwork}!`);
       const tokenId = nextTokenId.toString();
       
       // Reset form
@@ -566,10 +562,14 @@ export default function MintForm() {
       // Wait for a short delay to ensure transaction is processed
       await new Promise(resolve => setTimeout(resolve, 500));
 
-
-
-      // Redirect to the wish details page
-      router.push(`/wishes/${tokenId}`);
+      // For Solana, we might not have the traditional tokenId structure
+      if (isAbstract) {
+        // Redirect to the wish details page for Abstract
+        router.push(`/wishes/${tokenId}`);
+      } else {
+        // For Solana, redirect to a success page or wishes list
+        router.push('/mint-success');
+      }
       
     } catch (err) {
       toast.error('Failed to create wish');
@@ -587,6 +587,8 @@ export default function MintForm() {
             onSubmit={handleSubmit}
             className="space-y-5 md:space-y-6 w-full"
           >
+            <NetworkSelector />
+
             <WishFormFields
               formData={formData}
               setFormData={setFormData}
@@ -605,7 +607,7 @@ export default function MintForm() {
                 <WishPreview
                   ref={wishPreviewRef}
                   formData={formData}
-                  address={address}
+                  address={walletAddress}
                   nextTokenId={nextTokenId}
                 />
               </div>
@@ -619,19 +621,25 @@ export default function MintForm() {
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={isLoading || uploadingImage}
-              className="w-full bg-[var(--color-primary-main)] text-white py-3 px-6 rounded-lg hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base md:text-lg font-medium"
-            >
-              {!address
-                ? 'Connect & Create Wish'
-                : uploadingImage
+            {!isConnected ? (
+              <UnifiedWalletButton
+                className="w-full bg-[var(--color-primary-main)] text-white py-3 px-6 rounded-lg hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base md:text-lg font-medium"
+              >
+                Connect & Create Wish
+              </UnifiedWalletButton>
+            ) : (
+              <button
+                type="submit"
+                disabled={isMinting || uploadingImage}
+                className="w-full bg-[var(--color-primary-main)] text-white py-3 px-6 rounded-lg hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base md:text-lg font-medium"
+              >
+                {uploadingImage
                   ? 'Uploading to IPFS...'
-                  : isLoading
+                  : isMinting
                     ? 'Creating Wish...'
                     : 'Create Wish'}
-            </button>
+              </button>
+            )}
 
             {error && (
               <p className="text-red-500 text-sm mt-2">{error.message}</p>
@@ -658,7 +666,7 @@ export default function MintForm() {
               <WishPreview
                 ref={wishPreviewRef}
                 formData={formData}
-                address={address}
+                address={walletAddress}
                 nextTokenId={nextTokenId}
               />
             </div>
