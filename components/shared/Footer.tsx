@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const footerLinks = {
   product: [
@@ -102,9 +103,9 @@ const Footer = () => (
         <div className="flex flex-col gap-6 sm:gap-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex flex-wrap items-center justify-center gap-2 text-xs sm:text-sm text-[var(--color-grey-600)]">
-              <span>© 2025 WishMint.</span>
-              <span className="hidden sm:inline">•</span>
-              <span>Created by</span>
+              <span>© 2025 WishMint</span>
+              {/* <span className="hidden sm:inline">•</span> */}
+              {/* <span>Created by</span>
               <div className="flex flex-wrap items-center gap-2">
                 <a
                   href="https://x.com/0xmid_"
@@ -123,7 +124,7 @@ const Footer = () => (
                 >
                   BiggieBrik
                 </a>
-              </div>
+              </div> */}
             </div>
 
             <div className="flex items-center gap-4">
@@ -134,13 +135,24 @@ const Footer = () => (
                 rel="noopener noreferrer"
               >
                 Powered by
-                <span
-                  className="text-base sm:text-lg"
-                  role="img"
-                  aria-label="Abstract Logo"
-                >
-                  ✳️
-                </span>
+                <div className="flex items-center gap-1">
+                  <span
+                    className="text-base sm:text-lg"
+                    role="img"
+                    aria-label="Abstract Logo"
+                  >
+                    ✳️
+                  </span>
+                  <span className="text-xs text-[var(--color-grey-400)]">&</span>
+                  <Image
+                    src="/icons/solana.jpeg"
+                    alt="Solana Logo"
+                    width={16}
+                    height={16}
+                    className="w-4 h-4 sm:w-5 sm:h-5 rounded-sm"
+                  />
+                </div>
+                
               </a>
               <a
                 href="https://twitter.com"
