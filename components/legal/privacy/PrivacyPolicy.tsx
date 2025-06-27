@@ -115,7 +115,7 @@ const PrivacyPolicy: React.FC = () => {
           <div className="bg-[var(--color-primary-lighter)] rounded-xl p-4">
             <p className="text-[var(--color-primary-dark)]">
               Support<br />
-              Email: support@wishmint.xyz<br />
+              Email: xyzwishmint@gmail.com<br />
             </p>
           </div>
         </Section>

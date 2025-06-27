@@ -113,7 +113,7 @@ const LegalDisclaimer: React.FC = () => {
             <p className="text-[var(--color-primary-dark)]">
               Support
               <br />
-              Email: support@wishmint.xyz
+              Email: xyzwishmint@gmail.com
               <br />
             </p>
           </div>
